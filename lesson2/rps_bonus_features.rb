@@ -10,48 +10,53 @@ class Player
     self.score = 0
   end
 
-  def choose_name
-    raise NoMethodError.new("#{self.class} failed to define choose_name")
+  def reset
+    self.move = nil
+    self.score = 0
   end
 
   def to_s
     name.to_s
   end
-  # move history?
 end
 
-class Human < Player 
-  def choose_name
+class Human < Player
+  def choose_name # too many lines
     input = ''
     loop do
       puts 'Please enter player name:'
       input = gets.chomp
-      break unless input.empty?
-      puts 'Sorry, no input was recognized.'
+      if input.empty?
+        puts 'Sorry, no input was recognized.'
+      elsif input.length > 8
+        puts 'Sorry max of 8 character name.'
+      else
+        break
+      end
     end
     input
   end
 
   def choose_move
     input = ''
-    valid_moves = %w(Rock Paper Scissors).zip([Rock, Paper, Scissors]).to_h
+    valid_moves = %w(Rock Paper Scissors).zip([Rock, Paper, Scissors]).to_h #### Move method
     loop do
       puts 'Choose move:'
       input = gets.chomp.capitalize
       break if valid_moves.key?(input) #################### make a Move method
       puts 'Invalid move selected, choose again'
     end
-    self.move = valid_moves[input].new #################################### Move method
+    self.move = valid_moves[input].new ############################# Move method
   end
 end
 
 class Computer < Player
   def choose_name
-    ['Hal', 'R2D2', 'C3P0', 'SkyNet'].sample
+    ['Hal', 'R2D2', 'C3P0', 'SkyNet', 'rps_bot'].sample
   end
 
   def choose_move
-    self.move = [Rock, Paper, Scissors].sample.new ####################### Move method?
+    self.move = [Rock, Paper, Scissors].sample.new ################ Move method?
   end
   ##### pearsonalities #####
 end
@@ -100,44 +105,49 @@ class Spock < Move
   end
 end
 
-class RPSGame
-  attr_accessor :number_of_rounds, :human, :computer
+class RPSGame # add method for setting history
+  attr_accessor :best_of_number, :human, :computer, :history
 
-  # move history?
   def initialize
     puts '## WELCOME TO ROCK PAPER SCISSORS GAME ##'
-    self.human = Human.new       ########## This should stay?
+    self.human = Human.new
     self.computer = Computer.new ########## Move to RPSGame#play
-    get_number_of_rounds       ############ Better name => move to #play
+    self.history = [{ human: human.to_s, computer: computer.to_s, rounds: [] }]
   end
 
-  def play
+  def play # too many lines, too many branches
     loop do
-      round = 1
+      round_number = 1
     # choose lizard spock expansion?
     # choose opponent?
-    # choose number of rounds
+      self.best_of_number = ask_for_best_of_number
+      human.reset
+      computer.reset
       loop do
-        # iterate through rounds until one player has a winning score
-        computer.choose_move
-        human.choose_move
-        puts "#{human} chose #{human.move} and #{computer} chose #{computer.move}"
-        if human.move == computer.move
-          puts 'This round is a draw.'
-          next
-        end
-        winner = human.move.beats?(computer.move) ? human : computer
-        winner.score += 1
-        puts "#{winner} wins the round with a score of #{winner.score}"
-        round += 1
-        break if human.score >= ((number_of_rounds + 1) / 2)
-        break if computer.score >= ((number_of_rounds + 1) / 2)
+        current_round = Round.new(round_number, human, computer)
+        current_round.play
+        history.last[:rounds] << current_round
+        round_number += 1
+        break if human.score >= score_to_win || computer.score >= score_to_win
       end
       overall_winner = human.score > computer.score ? human : computer
-      puts "#{overall_winner} wins the entire game with a score of #{overall_winner.score}"
-      break unless play_again? ########### scores need to be reset
+      puts "#{overall_winner} wins the series with a score of \
+            #{overall_winner.score}"
+      break unless play_again?
+      history << { human: human.to_s, computer: computer.to_s, rounds: [] }
     end
-    puts '~~ THANKS FOR PLAYING GOODBYE ~~'
+    puts '~~~~~~ THANKS FOR PLAYING GOODBYE ~~~~~~~'
+    display_history
+  end
+
+  def display_history
+    history.each_with_index do |game, index|
+      puts "_________ Game ##{index + 1} ______________"
+      puts format('__ %<human>-8s | %<computer>-8s __Score__', game)
+      puts '--------------------------------'
+      puts game[:rounds]
+      puts
+    end
   end
 
   private
@@ -153,29 +163,82 @@ class RPSGame
     input.downcase.start_with?('y')
   end
 
-  def get_number_of_rounds # better name
+  def ask_for_best_of_number # too many lines
     number = 0
     loop do
       puts 'Play to best of how many rounds?'
-      number = gets.chomp.to_i
-      break if number.odd?
-      puts 'Sorry bad input. Must be an odd number'
+      number = gets.to_i
+      if number > 17
+        puts "You can't be serious, enter smaller number"
+        next
+      end
+      break if number.odd? && number.positive?
+      puts 'Sorry bad input. Must be a positive odd integer.'
     end
-    self.number_of_rounds = number
+    number
+  end
+
+  def score_to_win
+    ((best_of_number + 1) / 2)
   end
 end
 
-class Round # < RPS_game? either a collaborator or a subclass
-  attr_reader :round_number
+class Round # RPS_game collaborator
+  attr_reader :round_number, :human, :computer, :results
 
-  def initialize(round_number)
+  def initialize(round_number, human, computer)
     @round_number = round_number
+    @human = human
+    @computer = computer
+    @results = {}
   end
-  # dramatic intro
-  # each player chooses moves
-  # compare moves
-  # declare winnner
-  # update player score
+
+  # dramatic intro i.e. 'R2D2 leads!', 'Final Round!', 'Game point for Hal'
+  def play # to many lines, to many branches
+    puts "ROUND ##{round_number} READY FIGHT!"
+    computer.choose_move
+    human.choose_move
+    puts "#{human} chose #{human.move} and #{computer} chose #{computer.move}"
+    if human.move == computer.move
+      puts 'This round is a draw.'
+      save_results
+      return
+    end
+    winner = human.move.beats?(computer.move) ? human : computer
+    winner.score += 1
+    puts "#{winner} wins the round! \
+          #{human}: #{human.score} #{computer}: #{computer.score}"
+    save_results
+  end
+
+  def to_s
+    template = '%<h_move>-8s | %<c_move>-8s [ %<h_score>d | %<c_score>d ]'
+    "#{round_number}: " + format(template, results)
+  end
+
+  private
+
+  def save_results # too many method calls (branches)
+    results[:h_move] = human.move.to_s
+    results[:c_move] = computer.move.to_s
+    results[:h_score] = human.score.to_s
+    results[:c_score] = computer.score.to_s
+  end
 end
 
 RPSGame.new.play
+
+=begin
+Input handler
+  request possible inputs -help => quit, rock ...
+  allow quit
+  allow exit series
+  help?
+
+Prompt
+
+Human had input output
+RPSGame
+Round
+
+=end
