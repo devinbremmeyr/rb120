@@ -1,30 +1,177 @@
+# rubocop:disable Layout/TrailingWhitespace
 # TODO:
-# => Keep track of move history
-# => Computer personalities
 
-class Player
-  attr_accessor :name, :score, :move
+# Computer personalities
 
-  def initialize
-    self.name = choose_name
-    self.score = 0
+# Input handler
+# prompt
+
+=begin
+Input handler
+  request options inputs -help => quit, rock ...
+  allow quit
+  allow exit series => **game menu**
+
+Prompt
+  Input:
+    Human #choose_move #choose_name      (valid_move) (1 < name.length < 8)
+    RPSGame #ask_for_best_of_number  (y/n) (< 17, odd, positive)
+    
+    Computer/Game #choose_computer
+    # => quit, exit_series, help (only validation is check for these)
+     effect (skip to goodbye) (break out of series loop) (list options inputs)
+  
+  Ouput:
+    Human #choose_move #choose_name
+    RPSGame #initialize #play #play_again? #ask_for_best_of_number 
+      #display_history
+    Round #play
+
+=end
+
+# rubocop:enable Layout/TrailingWhitespace
+require 'pry'
+
+# module InOut
+#   def prompt(message)
+#     puts "=> #{message}"
+#   end
+
+#   def input
+#     print '> '
+#     gets.chomp
+#   end
+
+#   def input_with_test(message, warning)
+#     token = nil
+#     loop do
+#       prompt(message)
+#       token = input
+#       break if yield(token)
+#       prompt(warning)
+#     end
+#     token
+#   end
+# end
+
+class Move # make moves module?
+  include Comparable
+  @@expansion = false
+
+  def self.create(move_string)
+    {
+      Rock: Rock,
+      Paper: Paper,
+      Scissors: Scissors,
+      Lizard: Lizard,
+      Spock: Spock
+    }.fetch(move_string.to_sym).new
   end
 
-  def reset
-    self.move = nil
-    self.score = 0
+  def self.use_expansion?
+    @@expansion
+  end
+
+  def self.names
+    %w(Rock Paper Scissors) + (@@expansion ? %w(Lizard Spock) : [])
+  end
+
+  def self.toggle_expansion
+    @@expansion = !@@expansion
+  end
+
+  def <=>(other_move)
+    return 0 if self.class == other_move.class
+    return 1 if lesser_moves.include?(other_move.to_s)
+    -1
+  end
+
+  def victory_verb(other_move)
+    lesser_moves.index(other_move.to_s)
   end
 
   def to_s
-    name.to_s
+    self.class.to_s
+  end
+end
+
+class Rock < Move
+  def lesser_moves
+    %w(Scissors Lizard)
+  end
+
+  def victory_verb(other_move)
+    %w(blunts crushes)[super] if super
+  end
+end
+
+class Paper < Move
+  def lesser_moves
+    %w(Rock Spock)
+  end
+
+  def victory_verb(other_move)
+    %w(covers disproves)[super] if super
+  end
+end
+
+class Scissors < Move
+  def lesser_moves
+    %w(Paper Lizard)
+  end
+
+  def victory_verb(other_move)
+    %w(cuts decapitates)[super] if super
+  end
+end
+
+class Lizard < Move
+  def lesser_moves
+    %w(Paper Spock)
+  end
+
+  def victory_verb(other_move)
+    %w(eats poisons)[super] if super
+  end
+end
+
+class Spock < Move
+  def lesser_moves
+    %(Rock Scissors)
+  end
+
+  def victory_verb(other_move)
+    %w(vaporizes smashes)[super] if super
+  end
+end
+
+class Player
+  attr_reader :name, :move, :score
+
+  def initialize
+    @name = choose_name
+    @score = 0
+  end
+
+  def reset
+    @move = nil
+    @score = 0
+  end
+
+  def add_score
+    @score += 1
+  end
+
+  def to_s
+    name
   end
 end
 
 class Human < Player
-  def choose_name # too many lines
+  def choose_name # too many lines 13/10
     input = ''
     loop do
-      puts 'Please enter player name:'
+      print 'Please enter player name: '
       input = gets.chomp
       if input.empty?
         puts 'Sorry, no input was recognized.'
@@ -39,14 +186,13 @@ class Human < Player
 
   def choose_move
     input = ''
-    valid_moves = %w(Rock Paper Scissors).zip([Rock, Paper, Scissors]).to_h #### Move method
     loop do
-      puts 'Choose move:'
+      print 'Choose move: '
       input = gets.chomp.capitalize
-      break if valid_moves.key?(input) #################### make a Move method
+      break if Move.names.include?(input)
       puts 'Invalid move selected, choose again'
     end
-    self.move = valid_moves[input].new ############################# Move method
+    @move = Move.create(input)
   end
 end
 
@@ -56,114 +202,93 @@ class Computer < Player
   end
 
   def choose_move
-    self.move = [Rock, Paper, Scissors].sample.new ################ Move method?
+    move_name = Move.names.sample
+    @move = Move.create(move_name)
+    puts "#{self} plays #{move}"
   end
   ##### pearsonalities #####
 end
 
-class Move
-  def beats?(other_move)
-    lesser_moves.include?(other_move.to_s)
-  end
-
-  def ==(other_move)
-    self.class == other_move.class
-  end
-
-  def to_s
-    self.class.to_s
-  end
-end
-
-class Rock < Move
-  def lesser_moves
-    %w(Scissors Lizard)
-  end
-end
-
-class Paper < Move
-  def lesser_moves
-    %w(Rock Spock)
-  end
-end
-
-class Scissors < Move
-  def lesser_moves
-    %w(Paper Lizard)
-  end
-end
-
-class Lizard < Move
-  def lesser_moves
-    %w(Paper Spock)
-  end
-end
-
-class Spock < Move
-  def lesser_moves
-    %(Rock Scissors)
-  end
-end
-
-class RPSGame # add method for setting history
-  attr_accessor :best_of_number, :human, :computer, :history
+class RPSGame
+  attr_reader :best_of_number, :human, :computer, :history
 
   def initialize
-    puts '## WELCOME TO ROCK PAPER SCISSORS GAME ##'
-    self.human = Human.new
-    self.computer = Computer.new ########## Move to RPSGame#play
-    self.history = [{ human: human.to_s, computer: computer.to_s, rounds: [] }]
+    puts welcome
+    @human = Human.new
+    @best_of_number = 3
+    @history = GameHistory.new
+    history.human = human
+    @computer = Computer.new # move to menu
+    history.computer = computer  # move to menu
   end
 
-  def play # too many lines, too many branches
-    loop do
-      round_number = 1
-    # choose lizard spock expansion?
+  def menu # too many lines 16/10
     # choose opponent?
-      self.best_of_number = ask_for_best_of_number
-      human.reset
-      computer.reset
-      loop do
-        current_round = Round.new(round_number, human, computer)
-        current_round.play
-        history.last[:rounds] << current_round
-        round_number += 1
-        break if human.score >= score_to_win || computer.score >= score_to_win
+    loop do
+      puts '-------- Main Menu --------'
+      puts 'Options: (rounds) (expansion) (play) (history) (quit)'
+      case gets.chomp
+      when 'expansion' then choose_expansion
+      when 'rounds'    then ask_for_best_of_number
+      when 'play'      then play
+      when 'history'   then history.display
+      when 'quit'      then break
+      else puts 'Input not recognized, try again:'
       end
-      overall_winner = human.score > computer.score ? human : computer
-      puts "#{overall_winner} wins the series with a score of \
-            #{overall_winner.score}"
-      break unless play_again?
-      history << { human: human.to_s, computer: computer.to_s, rounds: [] }
+      print '<Enter> to return to menu'
+      gets
+      system('clear')
     end
     puts '~~~~~~ THANKS FOR PLAYING GOODBYE ~~~~~~~'
-    display_history
   end
 
-  def display_history
-    history.each_with_index do |game, index|
-      puts "_________ Game ##{index + 1} ______________"
-      puts format('__ %<human>-8s | %<computer>-8s __Score__', game)
-      puts '--------------------------------'
-      puts game[:rounds]
-      puts
+  def play # too many lines 14/10
+    round_number = 1
+    human.reset
+    computer.reset
+    winner = nil
+    loop do
+      current_round = Round.new(round_number, human, computer)
+      current_round.play
+      history.add_round(current_round)
+      winner = winning_player
+      break if winner
+      round_number += 1
     end
+    puts "!!!! #{winner} WINS THE SERIES  !!!!"
+    history.add_series
   end
 
   private
 
-  def play_again?
-    input = ''
-    loop do
-      puts 'Play again? (y/n)'
-      input = gets.chomp
-      break if input.match?(/\A[YyNn]/)
-      puts 'Sorry, input not recognized.'
-    end
-    input.downcase.start_with?('y')
+  def winning_player
+    return human if human.score == score_to_win
+    return computer if computer.score == score_to_win
+    nil
   end
 
-  def ask_for_best_of_number # too many lines
+  def welcome
+    [
+      ('#' * 41),
+      ('##' + ' ' * 37 + '##'),
+      '## WELCOME TO ROCK PAPER SCISSORS GAME ##',
+      ('##' + ' ' * 37 + '##'),
+      ('#' * 41)
+    ]
+  end
+
+  def choose_expansion
+    loop do  
+      puts (Move.use_expansion? ? "Remove" : "Add") +
+           " Lizard Spock expansion? (yes/no)"
+      input = gets.chomp.downcase
+      Move.toggle_expansion if input == 'yes'
+      break if input.match?(/\A(yes|no)/)
+      puts "Input unrecognized please enter yes or no"
+    end
+  end
+
+  def ask_for_best_of_number # too many lines 12/10
     number = 0
     loop do
       puts 'Play to best of how many rounds?'
@@ -175,7 +300,7 @@ class RPSGame # add method for setting history
       break if number.odd? && number.positive?
       puts 'Sorry bad input. Must be a positive odd integer.'
     end
-    number
+    @best_of_number = number
   end
 
   def score_to_win
@@ -183,31 +308,67 @@ class RPSGame # add method for setting history
   end
 end
 
-class Round # RPS_game collaborator
+class GameHistory
+  attr_reader :human, :computer, :rounds, :series
+
+  def initialize
+    @series = []
+    @rounds = []
+  end
+
+  def add_round(round)
+    rounds << round.to_s
+  end
+
+  def human=(human)
+    @human = human.to_s
+  end
+
+  def computer=(computer)
+    @computer = computer.to_s
+  end
+
+  def add_series
+    series << { human: human, computer: computer, rounds: rounds }
+    @rounds = []
+  end
+
+  def display
+    puts "########## Game History ##########"
+    series.each_with_index do |game, index|
+      puts "_________ Game ##{index + 1} ______________"
+      puts format('__ %<human>-8s | %<computer>-8s __Score__', game)
+      puts '--------------------------------'
+      puts game[:rounds]
+      puts
+    end
+  end
+end
+
+class Round
   attr_reader :round_number, :human, :computer, :results
 
   def initialize(round_number, human, computer)
     @round_number = round_number
     @human = human
     @computer = computer
-    @results = {}
   end
 
   # dramatic intro i.e. 'R2D2 leads!', 'Final Round!', 'Game point for Hal'
-  def play # to many lines, to many branches
-    puts "ROUND ##{round_number} READY FIGHT!"
-    computer.choose_move
+  def play # too many lines, too many branches(30)
+    puts ">>>> ROUND ##{round_number} READY FIGHT! <<<<"
     human.choose_move
-    puts "#{human} chose #{human.move} and #{computer} chose #{computer.move}"
+    print '             ><-><->< '
+    computer.choose_move
     if human.move == computer.move
-      puts 'This round is a draw.'
-      save_results
-      return
+      puts '==== draw ===== draw ==== draw ===='
+    else
+      loser, winner = [human, computer].sort_by(&:move)
+      winner.add_score
+      puts "#{winner.move} #{winner.move.victory_verb(loser.move)} #{loser.move}"
+      puts "#{winner} wins the round!           " \
+           "{ #{human}: #{human.score} #{computer}: #{computer.score} }"
     end
-    winner = human.move.beats?(computer.move) ? human : computer
-    winner.score += 1
-    puts "#{winner} wins the round! \
-          #{human}: #{human.score} #{computer}: #{computer.score}"
     save_results
   end
 
@@ -218,27 +379,14 @@ class Round # RPS_game collaborator
 
   private
 
-  def save_results # too many method calls (branches)
-    results[:h_move] = human.move.to_s
-    results[:c_move] = computer.move.to_s
-    results[:h_score] = human.score.to_s
-    results[:c_score] = computer.score.to_s
+  def save_results
+    @results = { h_move: human.move.to_s,
+                 c_move: computer.move.to_s,
+                 h_score: human.score,
+                 c_score: computer.score }
   end
 end
 
-RPSGame.new.play
-
-=begin
-Input handler
-  request possible inputs -help => quit, rock ...
-  allow quit
-  allow exit series
-  help?
-
-Prompt
-
-Human had input output
-RPSGame
-Round
-
-=end
+game = RPSGame.new
+game.menu
+game.history.display
