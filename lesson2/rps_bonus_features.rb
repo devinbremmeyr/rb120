@@ -2,6 +2,19 @@
 # TODO:
 
 # Computer personalities
+=begin
+  Concepts:
+    Rocky
+    plays the counter to your last move
+    RPS_bot (random every time)
+    Cycles through the moves
+    Edward: highly favor S moves
+  
+  Structure:
+    subclass from Computer
+    handle within the computer class
+
+=end
 
 # Input handler
 # prompt
@@ -32,7 +45,9 @@ Prompt
 # rubocop:enable Layout/TrailingWhitespace
 require 'pry'
 
-# module InOut
+# class InOut
+#   attr_reader :message
+
 #   def prompt(message)
 #     puts "=> #{message}"
 #   end
@@ -54,8 +69,7 @@ require 'pry'
 #   end
 # end
 
-class Move # make moves module?
-  include Comparable
+module Moves
   @@expansion = false
 
   def self.create(move_string)
@@ -80,68 +94,72 @@ class Move # make moves module?
     @@expansion = !@@expansion
   end
 
-  def <=>(other_move)
-    return 0 if self.class == other_move.class
-    return 1 if lesser_moves.include?(other_move.to_s)
-    -1
+  class Move
+    include Comparable
+
+    def <=>(other_move)
+      return 0 if self.class == other_move.class
+      return 1 if lesser_moves.include?(other_move.class)
+      -1
+    end
+
+    def victory_verb(other_move)
+      lesser_moves.index(other_move.class)
+    end
+
+    def to_s
+      self.class.to_s.delete_prefix('Moves::')
+    end
   end
 
-  def victory_verb(other_move)
-    lesser_moves.index(other_move.to_s)
+  class Rock < Move
+    def lesser_moves
+      [Scissors, Lizard].freeze
+    end
+
+    def victory_verb(other_move)
+      %w(blunts crushes)[super] if super
+    end
   end
 
-  def to_s
-    self.class.to_s
-  end
-end
+  class Paper < Move
+    def lesser_moves
+      [Rock, Spock].freeze
+    end
 
-class Rock < Move
-  def lesser_moves
-    %w(Scissors Lizard)
-  end
-
-  def victory_verb(other_move)
-    %w(blunts crushes)[super] if super
-  end
-end
-
-class Paper < Move
-  def lesser_moves
-    %w(Rock Spock)
+    def victory_verb(other_move)
+      %w(covers disproves)[super] if super
+    end
   end
 
-  def victory_verb(other_move)
-    %w(covers disproves)[super] if super
-  end
-end
+  class Scissors < Move
+    def lesser_moves
+      [Paper, Lizard].freeze
+    end
 
-class Scissors < Move
-  def lesser_moves
-    %w(Paper Lizard)
-  end
-
-  def victory_verb(other_move)
-    %w(cuts decapitates)[super] if super
-  end
-end
-
-class Lizard < Move
-  def lesser_moves
-    %w(Paper Spock)
+    def victory_verb(other_move)
+      %w(cuts decapitates)[super] if super
+    end
   end
 
-  def victory_verb(other_move)
-    %w(eats poisons)[super] if super
-  end
-end
+  class Lizard < Move
+    def lesser_moves
+      [Paper, Spock].freeze
+    end
 
-class Spock < Move
-  def lesser_moves
-    %(Rock Scissors)
+    def victory_verb(other_move)
+      %w(eats poisons)[super] if super
+    end
   end
 
-  def victory_verb(other_move)
-    %w(vaporizes smashes)[super] if super
+  class Spock < Move
+    def lesser_moves
+      [Rock, Scissors].freeze
+    end
+
+    def victory_verb(other_move)
+      %w(vaporizes smashes)[super] if super
+    end
   end
 end
 
@@ -189,10 +207,10 @@ class Human < Player
     loop do
       print 'Choose move: '
       input = gets.chomp.capitalize
-      break if Move.names.include?(input)
-      puts 'Invalid move selected, choose again'
+      break if Moves.names.include?(input)
+      puts "Invalid move selected, try: #{Moves.names.join(' | ')}"
     end
-    @move = Move.create(input)
+    @move = Moves.create(input)
   end
 end
 
@@ -202,8 +220,8 @@ class Computer < Player
   end
 
   def choose_move
-    move_name = Move.names.sample
-    @move = Move.create(move_name)
+    move_name = Moves.names.sample
+    @move = Moves.create(move_name)
     puts "#{self} plays #{move}"
   end
   ##### pearsonalities #####
@@ -219,7 +237,7 @@ class RPSGame
     @history = GameHistory.new
     history.human = human
     @computer = Computer.new # move to menu
-    history.computer = computer  # move to menu
+    history.computer = computer # move to menu
   end
 
   def menu # too many lines 16/10
@@ -278,11 +296,11 @@ class RPSGame
   end
 
   def choose_expansion
-    loop do  
-      puts (Move.use_expansion? ? "Remove" : "Add") +
+    loop do
+      puts (Moves.use_expansion? ? "Remove" : "Add") +
            " Lizard Spock expansion? (yes/no)"
       input = gets.chomp.downcase
-      Move.toggle_expansion if input == 'yes'
+      Moves.toggle_expansion if input == 'yes'
       break if input.match?(/\A(yes|no)/)
       puts "Input unrecognized please enter yes or no"
     end
