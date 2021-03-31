@@ -1,48 +1,26 @@
-# rubocop:disable Layout/TrailingWhitespace
-# TODO:
-
-# Computer personalities
-=begin
-  Concepts:
-    Rocky
-    plays the counter to your last move (requires history)
-    RPS_bot (random every time)
-    Cycles through the moves
-    Edward: highly favor S moves
-  
-  Structure:
-    note: unique choose_move behavior based on...Name?
-    subclass from Computer
-    handle within the computer class
-
-=end
-
-# rubocop:enable Layout/TrailingWhitespace
 require 'pry'
 
 module Moves
-  @@expansion = false
+  private
 
-  def self.create(move_string)
-    {
-      Rock: Rock,
-      Paper: Paper,
-      Scissors: Scissors,
-      Lizard: Lizard,
-      Spock: Spock
-    }.fetch(move_string.to_sym).new
+  attr_writer :expansion
+
+  public
+
+  def make(move_name)
+    Moves.const_get(move_name).new
   end
 
-  def self.use_expansion?
-    @@expansion
+  def use_expansion?
+    @expansion
   end
 
-  def self.names
-    %w(Rock Paper Scissors) + (@@expansion ? %w(Lizard Spock) : [])
+  def available_moves
+    %w(Rock Paper Scissors) + (@expansion ? %w(Lizard Spock) : [])
   end
 
-  def self.toggle_expansion
-    @@expansion = !@@expansion
+  def toggle_expansion
+    @expansion = !@expansion
   end
 
   class Move
@@ -115,9 +93,11 @@ module Moves
 end
 
 class Player
+  include Moves
   attr_reader :name, :score
 
-  def initialize
+  def initialize(expansion)
+    self.expansion = expansion
     reset
   end
 
@@ -158,19 +138,12 @@ class Human < Player
     loop do
       print 'Choose move: '
       input = gets.chomp.capitalize
-      break if Moves.names.include?(input)
-      puts "Invalid move selected, try: #{Moves.names.join(' | ')}"
+      break if available_moves.include?(input)
+      puts "Invalid move selected, try: #{available_moves.join(' | ')}"
     end
-    Moves.create(input)
+    make input
   end
 
-  private
-
-  def validate_name(name)
-    # less than 8
-    # must be word characters
-    # can't be empty string
-  end
 end
 
 class Computer < Player
@@ -179,26 +152,24 @@ class Computer < Player
   end
 
   def choose_move
-    move_name = Moves.names.sample
-    Moves.create(move_name)
+    make(available_moves.sample)
   end
-  ##### pearsonalities #####
 end
 
 class RPSGame
+  EXPANSION = false
+  BEST_OF_NUMBER = 3
   attr_reader :best_of_number, :human, :computer, :history
 
   def initialize
-    @human = Human.new
-    @computer = Computer.new
+    @human = Human.new(EXPANSION)
+    @computer = Computer.new(EXPANSION)
     computer.choose_name
     @history = History.new(human, computer)
-    @best_of_number = 3
-    @expansion = false
+    @best_of_number = BEST_OF_NUMBER
   end
 
   def menu # too many lines 18/10 , too many branches 21
-    # choose opponent?
     puts welcome
     human.choose_name
     loop do
@@ -268,10 +239,10 @@ class RPSGame
 
   def choose_expansion
     loop do
-      verb = Moves.use_expansion? ? "Remove" : "Add"
+      verb = human.use_expansion? ? "Remove" : "Add"
       print "#{verb} Lizard Spock expansion? (yes/no) > "
       input = gets.chomp.downcase
-      Moves.toggle_expansion if input == 'yes'
+      [human, computer].each(&:toggle_expansion) if input == 'yes'
       break if input.match?(/\A(yes|no)/)
       puts "Input unrecognized please enter yes or no"
     end
@@ -372,6 +343,8 @@ class Round
       scroll "#{arrow} #{winning_move} #{verb} #{losing_move} #{arrow}"
       puts "#{winner} wins the round!    #{scores}"
     end
+    sleep(2)
+    system 'clear'
   end
 
   def winning_move
