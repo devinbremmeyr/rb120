@@ -1,26 +1,30 @@
 require 'pry'
 
 module Moves
-  private
-
-  attr_writer :expansion
-
-  public
+  @@expansion = false
 
   def make(move_name)
     Moves.const_get(move_name).new
   end
 
   def use_expansion?
-    @expansion
+    @@expansion
   end
 
   def available_moves
-    %w(Rock Paper Scissors) + (@expansion ? %w(Lizard Spock) : [])
+    %w(Rock Paper Scissors) + (@@expansion ? %w(Lizard Spock) : [])
   end
 
   def toggle_expansion
-    @expansion = !@expansion
+    @@expansion = !@@expansion
+  end
+
+  def abbrieviations
+    %w(R P S) + (@@expansion ? %w(L V) : [])
+  end
+
+  def full_name(letter)
+    abbrieviations.zip(available_moves).to_h[letter]
   end
 
   class Move
@@ -96,8 +100,7 @@ class Player
   include Moves
   attr_reader :name, :score
 
-  def initialize(expansion)
-    self.expansion = expansion
+  def initialize
     reset
   end
 
@@ -115,17 +118,15 @@ class Player
 end
 
 class Human < Player
-  def choose_name # too many lines 16/10
+  def choose_name # too many lines 13/10
     input = ''
     loop do
-      print 'Please enter player name: '
+      prompt 'Please enter player name'
       input = gets.chomp
       if input.empty?
         puts 'Sorry, no input was recognized.'
       elsif input.length > 8
-        puts 'Sorry max of 8 character name.'
-      elsif input.match?(/\W/)
-        puts 'Sorry, name can only contain letters, numbers, or underscore'
+        puts 'Sorry, name must be 8 characters or fewer.'
       else
         break
       end
@@ -133,17 +134,19 @@ class Human < Player
     @name = input
   end
 
-  def choose_move
+  def choose_move # too many lines 11
     input = ''
     loop do
-      print 'Choose move: '
+      prompt 'Choose move'
       input = gets.chomp.capitalize
+      input = full_name(input) if abbrieviations.include?(input)
       break if available_moves.include?(input)
       puts "Invalid move selected, try: #{available_moves.join(' | ')}"
+      print "first letter also works"
+      puts(use_expansion? ? " (use V for Spock)" : '')
     end
     make input
   end
-
 end
 
 class Computer < Player
@@ -156,60 +159,86 @@ class Computer < Player
   end
 end
 
-class RPSGame
-  EXPANSION = false
-  BEST_OF_NUMBER = 3
-  attr_reader :best_of_number, :human, :computer, :history
-
-  def initialize
-    @human = Human.new(EXPANSION)
-    @computer = Computer.new(EXPANSION)
-    computer.choose_name
-    @history = History.new(human, computer)
-    @best_of_number = BEST_OF_NUMBER
+module Display
+  def prompt(message='')
+    print "#{message} > "
   end
 
-  def menu # too many lines 18/10 , too many branches 21
+  def scroll(message)
+    "#{message}\n".each_char do |char|
+      print char
+      sleep(0.03)
+    end
+  end
+
+  def wait_for_user
+    prompt '<Enter> to continue'
+    gets
+    clear
+  end
+
+  def clear
+    system('clear')
+  end
+end
+
+class RPSGame
+  include Display
+  EXPANSION = false
+  SCORE_TO_WIN = 2
+  MAX_SCORE_TO_WIN = 9 # history formating not set up for double digits
+  attr_reader :score_to_win, :human, :computer, :history
+
+  def initialize
+    @human = Human.new
+    @computer = Computer.new
+    computer.toggle_expansion if EXPANSION
+    @history = History.new
+    @score_to_win = SCORE_TO_WIN
+  end
+
+  def start
     puts welcome
     human.choose_name
+    computer.choose_name
+    clear
+    menu
+  end
+
+  private
+
+  def menu # too many lines 15/10
     loop do
-      puts '-------- Main Menu --------'
-      puts 'Options: (play) (rounds) (expansion) (history) (quit)'
+      puts '--------------------- Main Menu --------------------'
+      puts 'Options: (play) (score) (expansion) (history) (quit)'
+      prompt
       case gets.chomp.downcase
       when 'play'      then play
-      when 'rounds'    then ask_for_best_of_number
+      when 'score'     then choose_score_to_win
       when 'expansion' then choose_expansion
       when 'history'   then history.display
       when 'quit'      then break
       else puts 'Input not recognized, try again...'
       end
-      print '<Enter> to return to menu >'
-      gets
-      system('clear')
+      wait_for_user
     end
     puts goodbye
   end
 
-  def play # too many lines 12/10
+  def play # too many lines 12/10, too many branches 18
+    show_series_introduction
     round_number = 1
     human.reset
     computer.reset
-    loop do
+    while winning_player.nil?
       current_round = Round.new(round_number, human, computer)
       current_round.play
       history.add_round(current_round)
-      break unless winning_player.nil?
       round_number += 1
     end
-    puts "!!!! #{winning_player} WINS THE SERIES  !!!!"
-    history.add_series
+    declare_series_winner
+    history.add_series(human, computer)
   end
-
-  def use_expansion?
-    @expansion
-  end
-
-  private
 
   def winning_player
     return human if human.score == score_to_win
@@ -227,6 +256,12 @@ class RPSGame
     ]
   end
 
+  def show_series_introduction
+    scroll "#{human} versus #{computer} "
+    scroll "win #{score_to_win} rounds to take the series"
+    wait_for_user
+  end
+
   def goodbye
     [
       "",
@@ -237,59 +272,53 @@ class RPSGame
     ]
   end
 
+  def declare_series_winner
+    scroll "!!!! #{winning_player} WINS THE SERIES  !!!!"
+  end
+
   def choose_expansion
     loop do
       verb = human.use_expansion? ? "Remove" : "Add"
-      print "#{verb} Lizard Spock expansion? (yes/no) > "
+      prompt "#{verb} Lizard Spock expansion? (yes/no)"
       input = gets.chomp.downcase
-      [human, computer].each(&:toggle_expansion) if input == 'yes'
+      computer.toggle_expansion if input == 'yes'
       break if input.match?(/\A(yes|no)/)
       puts "Input unrecognized please enter yes or no"
     end
   end
 
-  def ask_for_best_of_number
+  def choose_score_to_win # Too many lines 13/10
     number = 0
     loop do
-      puts 'Play to best of how many rounds?'
+      prompt 'Score how many points to win a series?'
       number = gets.to_i
-      break if number.odd? && number.positive?
-      puts 'Sorry bad input. Must be a positive odd integer.'
+      if number > MAX_SCORE_TO_WIN
+        puts "That score is too high. " \
+             "Choose a number less than #{MAX_SCORE_TO_WIN + 1}"
+        next
+      end
+      break if number.positive?
+      puts 'Sorry bad input. Must be a positive integer.'
     end
-    @best_of_number = number
-  end
-
-  def score_to_win
-    ((best_of_number + 1) / 2)
-  end
-
-  def toggle_expansion
-    @expansion = !@expansion
+    @score_to_win = number
   end
 end
 
 class History
-  def initialize(human, computer)
-    @human = human
-    @computer = computer
+  def initialize
     @series = []
     @rounds = []
   end
 
   def add_round(round)
-    @rounds << round.to_s
+    template = '%<number>-2d: ' \
+               '%<human_move>-8s | %<computer_move>-8s ' \
+               '[ %<human_score>d | %<computer_score>d ]'
+    @rounds << format(template, round.results)
   end
 
-  def human
-    @human.to_s
-  end
-
-  def computer
-    @computer.to_s
-  end
-
-  def add_series
-    @series << { human: human, computer: computer, rounds: @rounds }
+  def add_series(human, computer)
+    @series << { human: human.to_s, computer: computer.to_s, rounds: @rounds }
     @rounds = []
   end
 
@@ -306,11 +335,11 @@ class History
 end
 
 class Round
-  attr_reader :round_number, :results
-  attr_reader :human, :human_move, :computer, :computer_move
+  include Display
+  attr_reader :number, :human, :human_move, :computer, :computer_move
 
-  def initialize(round_number, human, computer)
-    @round_number = round_number
+  def initialize(number, human, computer)
+    @number = number
     @human = human
     @computer = computer
     @human_move = nil
@@ -318,19 +347,25 @@ class Round
   end
 
   def play
-    puts "/////// ROUND ##{round_number} READY FIGHT! \\\\\\\\\\\\\\"
+    puts "/////// ROUND ##{number} READY FIGHT! \\\\\\\\\\\\\\"
     @human_move = human.choose_move
     @computer_move = computer.choose_move
     puts '             ><-><->< '
     puts "             #{computer_move}"
     declare_winner
-    save_results
     puts
   end
 
-  def to_s
-    template = '%<h_move>-8s | %<c_move>-8s [ %<h_score>d | %<c_score>d ]'
-    "#{round_number}: " + format(template, results)
+  def results
+    {
+      number: number,
+      human: human.to_s,
+      computer: computer.to_s,
+      computer_move: computer_move.to_s,
+      human_move: human_move.to_s,
+      human_score: human.score,
+      computer_score: computer.score
+    }
   end
 
   private
@@ -343,8 +378,7 @@ class Round
       scroll "#{arrow} #{winning_move} #{verb} #{losing_move} #{arrow}"
       puts "#{winner} wins the round!    #{scores}"
     end
-    sleep(2)
-    system 'clear'
+    wait_for_user
   end
 
   def winning_move
@@ -369,25 +403,11 @@ class Round
     ">>>>>>>>>>"
   end
 
-  def scroll(message)
-    "#{message}\n".each_char do |char|
-      print char
-      sleep(0.03)
-    end
-  end
-
   def scores
     "{ #{human}: #{human.score} #{computer}: #{computer.score} }"
-  end
-
-  def save_results
-    @results = { h_move: human_move.to_s,
-                 c_move: computer_move.to_s,
-                 h_score: human.score,
-                 c_score: computer.score }
   end
 end
 
 game = RPSGame.new
-game.menu
+game.start
 game.history.display
