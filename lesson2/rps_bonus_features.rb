@@ -1,5 +1,3 @@
-require 'pry'
-
 module Moves
   @@expansion = false
 
@@ -96,6 +94,29 @@ module Moves
   end
 end
 
+module Display
+  def prompt(message='')
+    print "#{message} > "
+  end
+
+  def scroll(message)
+    "#{message}\n".each_char do |char|
+      print char
+      sleep(0.03)
+    end
+  end
+
+  def wait_for_user
+    prompt '<Enter> to continue'
+    gets
+    clear
+  end
+
+  def clear
+    system('clear')
+  end
+end
+
 class Player
   include Moves
   attr_reader :name, :score
@@ -118,12 +139,14 @@ class Player
 end
 
 class Human < Player
-  def choose_name # too many lines 13/10
+  include Display
+  # rubocop:disable Metrics/MethodLength
+  def choose_name
     input = ''
     loop do
       prompt 'Please enter player name'
       input = gets.chomp
-      if input.empty?
+      if input.empty? || input.match?(/\A\s+\z/)
         puts 'Sorry, no input was recognized.'
       elsif input.length > 8
         puts 'Sorry, name must be 8 characters or fewer.'
@@ -134,7 +157,7 @@ class Human < Player
     @name = input
   end
 
-  def choose_move # too many lines 11
+  def choose_move
     input = ''
     loop do
       prompt 'Choose move'
@@ -147,6 +170,7 @@ class Human < Player
     end
     make input
   end
+  # rubocop:enable Metrics/MethodLength
 end
 
 class Computer < Player
@@ -156,29 +180,6 @@ class Computer < Player
 
   def choose_move
     make(available_moves.sample)
-  end
-end
-
-module Display
-  def prompt(message='')
-    print "#{message} > "
-  end
-
-  def scroll(message)
-    "#{message}\n".each_char do |char|
-      print char
-      sleep(0.03)
-    end
-  end
-
-  def wait_for_user
-    prompt '<Enter> to continue'
-    gets
-    clear
-  end
-
-  def clear
-    system('clear')
   end
 end
 
@@ -207,37 +208,46 @@ class RPSGame
 
   private
 
-  def menu # too many lines 15/10
+  # rubocop: disable Metrics/MethodLength
+  # rubocop: disable Metrics/AbcSize
+  def menu
     loop do
-      puts '--------------------- Main Menu --------------------'
-      puts 'Options: (play) (score) (expansion) (history) (quit)'
+      puts '------------------------- Main Menu ------------------------'
+      puts 'Options: (play) (score) (expansion) (rules) (history) (quit)'
       prompt
       case gets.chomp.downcase
       when 'play'      then play
       when 'score'     then choose_score_to_win
       when 'expansion' then choose_expansion
       when 'history'   then history.display
+      when 'rules'     then show_rules
       when 'quit'      then break
       else puts 'Input not recognized, try again...'
       end
       wait_for_user
     end
-    puts goodbye
+    scroll goodbye
   end
+  # rubocop: enable Metrics/MethodLength
+  # rubocop: enable Metrics/AbcSize
 
-  def play # too many lines 12/10, too many branches 18
+  def play
     show_series_introduction
-    round_number = 1
     human.reset
     computer.reset
+    play_until_someone_wins
+    declare_series_winner
+    history.add_series(human, computer)
+  end
+
+  def play_until_someone_wins
+    round_number = 1
     while winning_player.nil?
       current_round = Round.new(round_number, human, computer)
       current_round.play
       history.add_round(current_round)
       round_number += 1
     end
-    declare_series_winner
-    history.add_series(human, computer)
   end
 
   def winning_player
@@ -263,13 +273,7 @@ class RPSGame
   end
 
   def goodbye
-    [
-      "",
-      "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-      "~~~~~~~ THANKS FOR PLAYING GOODBYE ~~~~~~",
-      "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-      ""
-    ]
+    ' THANKS FOR PLAYING GOODBYE '.center(60, '~')
   end
 
   def declare_series_winner
@@ -287,7 +291,21 @@ class RPSGame
     end
   end
 
-  def choose_score_to_win # Too many lines 13/10
+  def show_rules
+    puts <<-RULES
+    In the standard game one of three moves can be played each round.
+    The following shows which move beats which.
+    The greater than sign (>) indicates Paper beats Rock
+        Paper > Rock > Scissors > Paper
+    
+    The Lizard Spock expansion adds two more playable moves:
+        [Paper & Lizard] > Spock > [Rock & Scissors]
+        [Rock & Scissors] > Lizard > [Paper & Spock]
+    RULES
+  end
+
+  # rubocop: disable Metrics/MethodLength
+  def choose_score_to_win
     number = 0
     loop do
       prompt 'Score how many points to win a series?'
@@ -302,6 +320,7 @@ class RPSGame
     end
     @score_to_win = number
   end
+  # rubocop: enable Metrics/MethodLength
 end
 
 class History
